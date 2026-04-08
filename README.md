@@ -29,3 +29,16 @@ A RESTful API built for managing travel projects and planning trips. This applic
 2. Run the following command in the root directory:
    ```bash
    docker-compose up --build
+
+### Local setup
+1. Install dependencies: pip install -r requirements.txt
+2. Run server: uvicorn main:app --reload
+
+### API Documentation
+1. Swagger UI: http://localhost:8000/docs
+2. ReDoc: http://localhost:8000/redoc
+
+### Decisions & Assumptions
+- Framework: FastAPI for high performance and auto-documentation.
+- Database: SQLite for simplicity and meeting the 2-hour timeframe.
+- Validation: Place IDs are verified against the Art Institute of Chicago API before being saved to the database.

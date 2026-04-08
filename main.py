@@ -3,7 +3,6 @@ from typing import List
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 
-import database
 import models
 import schemas
 import services
@@ -70,3 +69,60 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     db.delete(project)
     db.commit()
     return None
+
+
+@app.post("/projects/{project_id}/places/", response_model=schemas.ProjectPlaceResponse)
+async def add_place_to_project(
+    project_id: int, 
+    place_data: schemas.ProjectPlaceCreate, 
+    db: Session = Depends(get_db)
+):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if len(project.places) >= 10:
+        raise HTTPException(status_code=400, detail="Project already has 10 places")
+
+    existing = db.query(models.ProjectPlace).filter(
+        models.ProjectPlace.project_id == project_id,
+        models.ProjectPlace.external_api_id == place_data.external_api_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="This place is already in the project")
+
+    if not await services.validate_artwork_id(place_data.external_api_id):
+        raise HTTPException(status_code=400, detail="Invalid External API ID")
+
+    new_place = models.ProjectPlace(**place_data.model_dump(), project_id=project_id)
+    db.add(new_place)
+    
+    project.is_completed = False
+    
+    db.commit()
+    db.refresh(new_place)
+    return new_place
+
+@app.patch("/projects/places/{place_id}", response_model=schemas.ProjectPlaceResponse)
+def update_place(place_id: int, update_data: schemas.ProjectPlaceUpdate, db: Session = Depends(get_db)):
+    place = db.query(models.ProjectPlace).filter(models.ProjectPlace.id == place_id).first()
+    if not place:
+        raise HTTPException(status_code=404, detail="Place not found")
+
+    if update_data.notes is not None:
+        place.notes = update_data.notes
+    
+    if update_data.is_visited is not None:
+        place.is_visited = update_data.is_visited
+        db.commit()
+        
+        project = place.project
+        all_visited = all(p.is_visited for p in project.places)
+        if all_visited:
+            project.is_completed = True
+        else:
+            project.is_completed = False
+        db.commit()
+
+    db.refresh(place)
+    return place
